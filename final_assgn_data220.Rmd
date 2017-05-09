@@ -1,0 +1,447 @@
+---
+title: "Amazon Ratings Analysis"
+author: "Daniel Pontoh"
+date: "May 8, 2017"
+output: 
+  html_document:
+    theme: sandstone
+    toc: true
+    toc_float: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+```{r library}
+library(tidyverse)
+library(ggplot2)
+library(knitr)
+library(data.table)
+```
+This is the final for DATA220G at Great Bay Community College.
+
+From DATA220G Spring 2017 Blackboard:
+
+"The file: https://rud.is/dl/ratings.csv.zip contains a CSV of ratings for various Amazon products, some dating back to 2000. NOTE: The 2014 data is partially incomplete. Take that into account as you see fit.
+
+It’s 3.7 MB compressed and ~15 MB uncompressed. You should really download it and work from a local copy."
+
+
+# Questions {.tabset .tabset-pills}
+
+1) Provide an exploratory overview summary of the data. Include anything you believe provides context for the rest of the report. This does not have to be elaborate.
+2) How many total, distinct items were rated each year? Is the trend going up, down or remaining relatively flat (for each product category)
+3) What are the top 5 and bottom 5 items per year based solely on ratings?
+4) From the data you extracted for the previous question, how many years were each item in the top 5?
+5) How many distinct items per product category have an average of 5 for a rating?
+6) How many distinct items per product category have an average of 1 for a rating?
+7) What are the overall top 5 items per product category?
+8) What is the distribution of the mean item rating per product category? Which way do ratings seem to skew (if they skew at all)? Does this differ much (or at all) by product category?
+9) What is the distribution of the median item rating per product category? How does this differ (if at all) from the answer to the previous question?
+10) Who are the top 5 reviewers per product category?
+11) What is the distribution of the number of reviews per-year for all the reviewers in the previous question?
+12) What is the overall mean rating given by all of these reviewers?
+13) Which month(s) get the majority of reviews?
+14) What is the overall trend for number of reviews per month?
+15) I want to move my e-commerce store to Amazon. Based on your analysis of the ratings data, how trustworthy are Amazon reviewer ratings? i.e. Can I trust that reviewer ratings accurately reflect the quality of my products? Why or why not?
+16) Which reviewers (you can limit it to any top “n” of your choice) do I have to watch out for (i.e. which ones give consistently low ratings)? This is both easier and harder than it sounds. You need to provide your reasoning for how you came up with a ranking. Don’t over-think this or under-think this.
+17) Your final section of the report should be the output of a call to devtools::session_info() or sessionInfo(). That will provide me with information on the version # of packages you ended up using directly or indirectly.
+
+## 1
+
+### Provide an exploratory overview summary of the data. Include anything you believe provides context for the rest of the report. This does not have to be elaborate.
+
+```{r q1}
+dt <- read.csv("ratingss.csv")
+
+summary(dt)
+```
+## 2
+
+### How many total, distinct items were rated each year? Is the trend going up, down or remaining relatively flat (for each product category)
+
+
+```{r q2}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year) %>%
+  filter(!duplicated(asin)) %>%
+  ungroup() %>%
+  count(year, product) %>%
+  ggplot(aes(x=year, y=n, color = "red")) +
+  geom_smooth(method = "lm", color = "blue") +
+  geom_line() +
+  geom_point() + 
+  theme_bw() +
+  ggtitle("Total Distinct Items Rated by Year", subtitle = "*Note: 2014 data is incomplete") +
+  labs(x = "Year", y = "# of Items") +
+  theme(legend.position="none") +
+  facet_wrap(~product)
+  
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year) %>%
+  filter(!duplicated(asin)) %>%
+  ungroup() %>%
+  count(year, product) %>%
+  arrange(product, year) %>%
+  kable()
+
+```
+
+## 3
+
+### What are the top 5 and bottom 5 items per year based solely on ratings?
+
+#### Average Rating Score is calculated as: mean(rating)*n()
+
+##### Top 5 Avg Ratings by Year
+```{r q3a}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year, asin) %>%
+  mutate(avg_rting_score = mean(rating)*n()) %>%
+  filter(!duplicated(asin)) %>%
+  ungroup() %>%
+  group_by(year) %>%
+  top_n(n = 5, wt = avg_rting_score) %>%
+  select(-day_month, -rating, -reviewer) %>%
+  arrange(year, desc(avg_rting_score)) %>%
+  filter(row_number() == c(1:5)) %>%
+  kable()
+```
+
+
+#### Bottom 5 Avg Ratings by Year
+```{r q3b}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year, asin) %>%
+  mutate(avg_rting_score = mean(rating)/n()) %>%
+  filter(!duplicated(asin)) %>%
+  ungroup() %>%
+  group_by(year) %>%
+  top_n(n = -5, wt = avg_rting_score) %>%
+  select(-day_month, -rating, -reviewer) %>%
+  arrange(year, avg_rting_score) %>%
+  filter(row_number() == c(1:5)) %>%
+  kable()
+```
+
+## 4
+
+### From the data you extracted for the previous question, how many years were each item in the top 5?
+
+```{r q4}
+
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year, asin) %>%
+  mutate(avg_rting_score = mean(rating)*n()) %>%
+  filter(!duplicated(asin)) %>%
+  ungroup() %>%
+  group_by(year) %>%
+  top_n(n = 5, wt = avg_rting_score) %>%
+  select(-day_month, -rating, -reviewer) %>%
+  arrange(year, desc(avg_rting_score)) %>%
+  filter(row_number() == c(1:5)) %>%
+  ungroup() %>%
+  count(asin) %>%
+  arrange(desc(n)) %>%
+  kable()
+```
+
+## 5
+
+### How many distinct items per product category have an average of 5 for a rating?
+
+```{r q5}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year, asin) %>%
+  mutate(avg_rting = mean(rating)) %>%
+  filter(!duplicated(asin)) %>%
+  ungroup() %>%
+  group_by(product) %>%
+  filter(avg_rting == 5) %>%
+  count(product) %>%
+  ggplot(aes(x= product, y = n, fill = product)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = n), hjust = 1.125) +
+  ggtitle(label = "# of Distinct Items w/ Average Rating 5", subtitle = "per Product Category") +
+  theme(legend.position = "none") +
+  labs(x = "Product Category", y="# of Items") +
+  coord_flip()
+```
+
+## 6
+
+### How many distinct items per product category have an average of 1 for a rating?
+
+```{r q6}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year, asin) %>%
+  mutate(avg_rting = mean(rating)) %>%
+  filter(!duplicated(asin)) %>%
+  ungroup() %>%
+  group_by(product) %>%
+  filter(avg_rting == 1) %>%
+  count(product) %>%
+  ggplot(aes(x= product, y = n, fill = product)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = n), hjust = 1.125) +
+  ggtitle(label = "# of Distinct Items w/ Average Rating 1", subtitle = "per Product Category") +
+  theme(legend.position = "none") +
+  labs(x = "Product Category", y="# of Items") +
+  coord_flip()
+
+```
+
+## 7
+
+### What are the overall top 5 items per product category?
+
+#### Automotive
+1)
+2)
+3)
+4)
+5)
+
+#### Baby Products
+1)
+2)
+3)
+4)
+5)
+
+#### Lawn and Garden
+1)
+2)
+3)
+4)
+5)
+
+#### Musical Instruments
+1)
+2)
+3)
+4)
+5)
+
+#### Office Products
+1)
+2)
+3)
+4)
+5)
+
+
+
+```{r q7}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year, asin) %>%
+  mutate(avg_rting = mean(rating),
+         med_rting = median(rating),
+         index = (med_rting + avg_rting) * n()) %>%
+  filter(!duplicated(asin)) %>%
+  ungroup() %>%
+  group_by(product) %>%
+  top_n(n = 5, wt = index) %>%
+  filter(row_number() == c(1:5)) %>%
+  arrange(product, desc(index)) %>%
+  kable()
+```
+
+## 8
+
+### What is the distribution of the mean item rating per product category? Which way do ratings seem to skew (if they skew at all)? Does this differ much (or at all) by product category?
+
+All of the product category ratings seem to skew left as shown below.
+
+```{r q8}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year, asin) %>%
+  mutate(avg_rting = mean(rating)) %>%
+  ggplot(aes(x = avg_rting, color = product)) +
+  geom_freqpoly() +
+  theme(legend.position = "none") +
+  ggtitle("Mean Distribution of Item Ratings", subtitle = "per Product Category") +
+  labs(x = "Average Rating", y = "Count") +
+  facet_wrap(~product)
+
+```
+
+## 9
+
+### What is the distribution of the median item rating per product category? How does this differ (if at all) from the answer to the previous question?
+
+This barely differs from the previous question if at all.
+
+```{r q9}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(year, asin) %>%
+  mutate(med_rting = median(rating)) %>%
+  ggplot(aes(x = med_rting, color = product)) +
+  geom_freqpoly() +
+  theme(legend.position = "none") +
+  ggtitle("Median Distribution of Item Ratings", subtitle = "per Product Category") +
+  labs(x = "Median Rating", y = "Count") +
+  facet_wrap(~product)
+
+```
+
+
+## 10
+
+### Who are the top 5 reviewers per product category?
+```{r q10}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(product) %>%
+  count(reviewer) %>%
+  arrange(product, desc(n)) %>%
+  filter(row_number() == c(1:5)) %>%
+  kable()
+
+```
+
+## 11
+
+### What is the distribution of the number of reviews per-year for all the reviewers in the previous question?
+```{r q11}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  group_by(product) %>%
+  count(reviewer) %>%
+  arrange(product, desc(n)) %>%
+  filter(row_number() == c(1:5)) %>% 
+  .$reviewer -> top_reviewer_ID
+
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  filter(reviewer %in% top_reviewer_ID) %>%
+  group_by(year, reviewer) %>%
+  count(reviewer) %>%
+  arrange(reviewer, year, desc(n)) %>%
+  ungroup() %>%
+  ggplot(aes(x=year, y = n, color = reviewer)) +
+  geom_line() +
+  geom_point() +
+  theme(legend.position = "none") +
+  facet_wrap(~reviewer)
+```
+
+## 12
+
+### What is the overall mean rating given by all of these reviewers?
+
+```{r q12}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  arrange(year) %>%
+  filter(reviewer %in% top_reviewer_ID) %>%
+  group_by(reviewer) %>%
+  summarise(avg = mean(rating)) %>%
+  arrange(desc(avg)) %>%
+  kable()
+
+```
+
+## 13
+
+### Which month(s) get the majority of reviews?
+
+```{r q13}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  separate(day_month, into = c("month", "day"), sep = " ") %>%
+  group_by(year) %>%
+  count(month) %>%
+  mutate(yr_tot = sum(n), pct = n / yr_tot) %>%
+  arrange(year, desc(pct)) %>% 
+  filter(row_number() == c(1:3)) %>%
+  ungroup() %>%
+  count(month) %>%
+  arrange(desc(nn)) %>%
+  ggplot(aes(x = month, y = nn, fill = month)) +
+  geom_text(aes(label = nn), vjust = -.25) +
+  theme(legend.position = "none") +
+  ggtitle("Months that Get the Majority of Reviews", subtitle = "# of times a month is in the Top 3 largest %'s per year") +
+  labs(x = "Month", y = "# of times in Top 3") +
+  geom_bar(stat = "identity")
+
+```
+
+## 14
+
+### What is the overall trend for number of reviews per month?
+
+```{r q14}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  separate(day_month, into = c("month", "day"), sep = " ") %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(year) %>%
+  count(month) %>%
+  ungroup() %>%
+  ggplot(aes(x = year, y = n, color = month)) +
+  geom_point() +
+  geom_smooth(method = "lm") +
+  theme(legend.position = "none") +
+  facet_wrap(~month)
+
+
+```
+
+## 15
+
+### I want to move my e-commerce store to Amazon. Based on your analysis of the ratings data, how trustworthy are Amazon reviewer ratings? i.e. Can I trust that reviewer ratings accurately reflect the quality of my products? Why or why not?
+
+Based on my analysis of ratings data, Amazon reviewer ratings are not a good indicator of the actual quality of products. In general, people who review items on Amazon are rating things positively in the 4/5 range. It's possible that most items that are sold on Amazon are good quality. It's also possible that most people go to Amazon simply to say good things about products or that people are more likely to review something when they have a good experience.
+
+## 16
+
+### Which reviewers (you can limit it to any top “n” of your choice) do I have to watch out for (i.e. which ones give consistently low ratings)? This is both easier and harder than it sounds. You need to provide your reasoning for how you came up with a ranking. Don’t over-think this or under-think this.
+
+The reviewers below are the ones you have to watch out for. They have the lowest review ratings per review (mean review rating divided by # of reviews).
+
+```{r q16}
+separate(dt, date, into = c("day_month", "year"), sep = ",") %>%
+  mutate(year = as.numeric(year)) %>%
+  group_by(reviewer) %>%
+  mutate(avg_rting_by_tot = mean(rating) / n()) %>%
+  filter(!duplicated(reviewer)) %>%
+  arrange(avg_rting_by_tot, reviewer) %>%
+  top_n(n = 5, wt = avg_rting_by_tot) %>%
+  ungroup() %>%
+  filter(row_number() == c(1:5)) %>%
+  select(reviewer, avg_rting_by_tot) %>%
+  kable()
+
+```
+
+## 17
+
+### Your final section of the report should be the output of a call to devtools::session_info() or sessionInfo(). That will provide me with information on the version # of packages you ended up using directly or indirectly.
+
+```{r q17}
+sessionInfo()
+```
